@@ -222,7 +222,7 @@ C[row * N + col] = sum;
     .local_work_size([8, 8])
     .build()?;
 </code></pre>
-<p>And the time taken is 250ms, which is a huge improvement. We will call it an end here for matrix multiplication.</p>
+<p>And the time taken is 250ms, which is a huge improvement.</p>
 <h3 id="utilizing-local-memory">Utilizing Local Memory</h3>
 <p>This is another trick- previously, we talked about how memory coalescing can reduce global memory fetching. Can we do it further? Yes.</p>
 <p>The secret is using local memory. We can make a workgroup fetch global memory only once, store it in the local memory, so that instead of each work item fetching it, each workgroup fetches it only once.</p>
@@ -314,7 +314,7 @@ __local float local_B_T[TILE_SIZE][TILE_SIZE];
 }
 </code></pre>
 <p>Not the time reduced to 60ms! This is great achievements. But please note that to make local memory efficient, you must first do memory coalescing, which, albeit didn't yield much improvement, is still important.</p>
-<h3 id="use-constant-memory">Use Constant Memory</h3>
+<h3 id="using-constant-memory">Using Constant Memory</h3>
 <p>Constant Memory, well, is obviously faster. When you can use constant memory, use it. Otherwise, use global memory.</p>
 <p>To use constant memory, just change the <code>__global</code> to <code>__constant</code>.</p>
 <pre><code class="language-c">const src_5: &amp;str = r#&quot;
