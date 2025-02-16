@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/introduction-to-opencl/01/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>The Models in OpenCL - Introduction to OpenCL</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Introduction to OpenCL</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">The Models in OpenCL</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../02/" class="nav-link">Writing OpenCL Programs and OpenCL C</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../03/" class="nav-link">Optimizing an OpenCL Program</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" class="nav-link disabled">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../02/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#the-models-in-opencl" class="nav-link">The Models in OpenCL</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#disambiguation" class="nav-link">Disambiguation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#platform-and-device" class="nav-link">Platform and Device</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#the-three-major-models" class="nav-link">The Three Major Models</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="the-models-in-opencl">The Models in OpenCL</h1>
+<p>To use OpenCL, we must understand how OpenCL abstracts the real world devices so that we can program with it.</p>
+<h2 id="disambiguation">Disambiguation</h2>
+<p>The OpenCL standard had a bad choice of words that overlaps other things. For example, they have an abstracted device, but we also talk about real world devices. But device itself already has many meaning in English, and we can refer device to both a graphic card or a full computer. So we need to disambiguate.</p>
+<ul>
+<li>Anything we talk about in the future content that can both mean a physical thing and an abstracted thing, unless I add physical before it, I will always mean an abstracted thing on the software side. For example, if I say memory, I mean the memory abstracted by the OpenCL. If I say physical memory, I mean the actually physical memory on the GPU.</li>
+<li>Physical device will be exclusively used for GPU. A complete Computer will not be referred to as a physical device. Computer doesn't need physical prefix because we don't abstract the whole computer.</li>
+<li>CPU in OpenCL emulates a GPU, so we only focus on GPU architecture. Other type of devices usually have a similar architecture to GPU.</li>
+</ul>
+<h2 id="platform-and-device">Platform and Device</h2>
+<p>OpenCL defines a type of physical devices as a platform, for example, Nvidia GPU, Intel CPU. For a computer with a Xeon CPU and a Nvidia GPU, we have two platforms, one for the Intel CPU and one for the Nvidia GPU.</p>
+<p>Physical devices will be mapped to devices based on how the manufacturer defines them. Typically, each physical device will be mapped to a single device.</p>
+<p>For example, a computer with a Xeon CPU and a Nvidia GPU will have two devices, one for the Intel CPU and one for the Nvidia GPU. However, if there are two Nvidia GPUs, they will usually be mapped to two devices.</p>
+<p>A device can have many context. You can imagine it as something like a logic device, while the real device execute one of the context based on the schedule. A context and a device has identical components, and thus they are confused below for convenience. Usually, in actual programming, the device is solely used for creating a context, then never used again.</p>
+<h2 id="the-three-major-models">The Three Major Models</h2>
+<p>The most important part of the OpenCL is how it abstracts physical devices. OpenCL maps heterogeneous devices to same abstracted devices, thus offering a unified programming model.</p>
+<p>There are three models that are the most important in OpenCL:</p>
+<ul>
+<li>The Device Model: defines how the device interacts with the host computer.</li>
+<li>The Memory Model: defines how the memory is managed by the device.</li>
+<li>The Execution Model: defines how the program is executed on the device.</li>
+</ul>
+<p>Each model contains copious amount of details. We will introduce the most important ones. However, during this whole series, we will add more and more details to these models.</p>
+<h3 id="the-device-model">The Device Model</h3>
+<p>The Device Model defines how the device interacts with the host computer. Please note that host computer is a real-world computer, while the device here is an abstracted one.</p>
+<p>A device (or context) will hold a command queue, which is a, well, queue that accommodates all the commands. The host computer can submit commands to the device.</p>
+<p>We usually write OpenCL C (a variant of C) programs on the host computer, then dynamically compile them to the assembly of the target device, which will be sent to the command queue. As execution finishes, the result will be written back to the host computer.</p>
+<h3 id="the-execution-model">The Execution Model</h3>
+<p>After the command is sent to the device, it will be executed on the device. The execution model defines how the program is executed on the device.</p>
+<p>When it comes to parallel programming, we execute the same task many times at the same time. We can tell the device what task it should execute and how many times.</p>
+<p>We use a three-dimensional tuple to tell the device how many times it should execute the task <script type="math/tex">(x, y, z)</script> , which is <script type="math/tex">x \times y \times z</script> times. The reason why we use a tuple instead of a single number will be presented later. Now you need to know that, when we want a device to finish a task, we will distribute a task and a tuple. We call the task a kernel and the tuple a NDRange (N-Dimension range, very bad name).</p>
+<p>Now you need to know that, instead of a monolithic ALU, cache, other components like CPU, a physical parallel device (usually GPU) has many small cores (aka processing element, PE). Each PE will be abstracted into a work item.</p>
+<p>The PE are grouped. Within each group, we can share some memory (the local memory, later in the memory model), and we can do synchronization. Each physical group is called a compute unit (CU), and each CU is abstracted into a work group.</p>
+<p>Kind of confusing, now let's do a pair.</p>
+<ul>
+<li>A <em>ND Range</em> of tasks will be sent to a <em>physical device</em>.</li>
+<li>A <em>Work Group</em> of tasks will be sent to a <em>compute unit</em>.</li>
+<li>A <em>Work Item</em> of tasks will be sent to a <em>processing element</em>.</li>
+</ul>
+<p>The number of them typically don't match, and thus a PE may execute more than one work items.</p>
+<p>The ND Range will be splitted into multiple work groups that are usually of the same size as CU (You can add empty task for padding if it doesn't divide). Then, each CU will claim a work group. If there are remaining ones, CU that finishes will claim what's left.</p>
+<p>Work group size is also a tuple, for example, <script type="math/tex">(128, 128, 128)</script> , which means that each work group will have <script type="math/tex">128 \times 128 \times 128</script> work items. If we need to execute a ND Range of <script type="math/tex">(1024, 1024, 1024)</script> , we would have <script type="math/tex">512</script> work groups. If your device has more than <script type="math/tex">512</script> CUs, it will be executed in one go. If not, then it will be executed in batches. A workgroup will always have a continuous chunk that is not breakable.</p>
+<h3 id="the-memory-model">The Memory Model</h3>
+<p>A classical demonstration is as folllows,</p>
+<p><img alt="OpenCL Memory Model" src="../openclmem.png" /></p>
+<p>The picture is originally from <a href="https://de.wikipedia.org/wiki/Datei:OpenCL_Memory_model.svg">this link</a>, by Björn König.</p>
+<p>There are five types of memory.</p>
+<ul>
+<li>The host memory, which is the memory on the host computer. Usually just the RAM.</li>
+<li>The global memory of the device. Which is a big chunk of memory that is shared between all the PE. They are big, but slow. It can be accessed by the host.</li>
+<li>The global constant memory of the device. Which, is global memory, but constant and faster, yet readonly to PE. Can be accessed by the host.</li>
+<li>The local memory of each work group. It is a small chunk of memory that is only accessible by the PE in the same work group. They are smaller than the global memory, but faster.</li>
+<li>The private memory of each work item. It is a small chunk of memory that is only accessible by the PE in the same work item. They are the smallest, but fastest.</li>
+</ul>
+<p>There are many other details such as memory bank, but we will cover them later. Now you just need to know the five types of memory.</p>
+<p>Please note that we are, again, talking about the abstracted OpenCL device. In reality, take Nvidia GPU as an example, although we say that private memory is held by each work item, a GPU has a monolithic private memory bank that is distributed to each work item. This is also true for the local memory.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

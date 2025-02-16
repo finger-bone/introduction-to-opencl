@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/introduction-to-opencl/03/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Optimizing an OpenCL Program - Introduction to OpenCL</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Introduction to OpenCL</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href="../01/" class="nav-link">The Models in OpenCL</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../02/" class="nav-link">Writing OpenCL Programs and OpenCL C</a>
+                            </li>
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">Optimizing an OpenCL Program</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../02/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#optimizing-an-opencl-program" class="nav-link">Optimizing an OpenCL Program</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#matrix-multiplication" class="nav-link">Matrix Multiplication</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#avoid-bank-conflicts" class="nav-link">Avoid Bank Conflicts</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#branching-is-bad" class="nav-link">Branching is Bad</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="optimizing-an-opencl-program">Optimizing an OpenCL Program</h1>
+<p>Actually, after learning the previous two parts, you have already exhausted the most of the OpenCL features, and you can write many parallel programs. However, you may make tons of mistakes that make your program run slower. This chapter introduce common mistakes and how to fix them. Optimization is usually related to the hardware details.</p>
+<h2 id="matrix-multiplication">Matrix Multiplication</h2>
+<p>Most of them can be demonstrated with a simple case- matrix multiplication. We first write the simplest program,</p>
+<pre><code class="language-rust">extern crate ocl;
+use ocl::{ProQue};
+use std::time::Instant;
+
+const src_1: &amp;str = r#&quot;
+__kernel void matrix_multiply(__global float* A, __global float* B, __global float* C, const unsigned int N) {
+    int row = get_global_id(0);
+    int col = get_global_id(1);
+    for (int i = 0; i &lt; N; i++) {
+        C[row * N + col] += A[row * N + i] * B[i * N + col];
+    }
+}
+&quot;#;
+
+fn task() -&gt; ocl::Result&lt;()&gt; {
+
+    let m_n = 2048;
+    let matrix_size = m_n * m_n;
+
+    let mut m_a = vec![0.0f32; matrix_size];
+    let mut m_b = vec![0.0f32; matrix_size];
+
+    for i in 0..m_n {
+        for j in 0..m_n {
+            m_a[i * m_n + j] = (i as f32) + (j as f32);
+            m_b[i * m_n + j] = (i as f32) - (j as f32);
+        }
+    }
+
+    let pro_que = ProQue::builder()
+        .src(src_1)
+        .dims([m_n, m_n])
+        .build()?;
+
+    let buffer_a = pro_que.create_buffer::&lt;f32&gt;()?;
+    let buffer_b = pro_que.create_buffer::&lt;f32&gt;()?;
+    let buffer_c = pro_que.create_buffer::&lt;f32&gt;()?;
+
+    buffer_a.write(&amp;m_a).enq()?;
+    buffer_b.write(&amp;m_b).enq()?;
+
+    let kernel = pro_que.kernel_builder(&quot;matrix_multiply&quot;)
+        .arg(&amp;buffer_a)
+        .arg(&amp;buffer_b)
+        .arg(&amp;buffer_c)
+        .arg(m_n as u32)
+        .build()?;
+
+    let start = Instant::now();
+
+    unsafe { kernel.enq()?; }
+
+    let mut m_c = vec![0.0f32; matrix_size];
+    buffer_c.read(&amp;mut m_c).enq()?;
+
+    let duration = start.elapsed();
+    println!(&quot;Matrix multiplication took: {:?}&quot;, duration);
+
+    println!(&quot;C[1][1] = {}&quot;, m_c[1 * m_n + 1]);
+
+    Ok(())
+}
+
+fn main() {
+    task().unwrap();
+}
+</code></pre>
+<p>Which takes around 2s to complete on my machine- very bad. How we can build any AI with such a slow performance? We must optimize it.</p>
+<h3 id="avoid-global-memory-unless-necessary">Avoid Global Memory Unless Necessary</h3>
+<p>Global memory access is extremely slow. How does this hardware fact help? Well, in our previous code, we have,</p>
+<pre><code class="language-c">C[row * N + col] += A[row * N + i] * B[i * N + col];
+</code></pre>
+<p>Where <code>C</code> is a pointer to the global memory. Each loop, we are writing to the global memory. But it can be avoided by using,</p>
+<pre><code class="language-c">float sum = 0.0f;
+
+for (int i = 0; i &lt; N; i++) {
+    sum += A[row * N + i] * B[i * N + col];
+}
+
+C[row * N + col] = sum;
+</code></pre>
+<p>Local variables are stored in the private memory.</p>
+<p>Now let's try again- 950ms, which is less than halved, but still not good.</p>
+<h3 id="memory-coalescing">Memory Coalescing</h3>
+<p>We can further reduce the global memory access by a trick called memory coalescing. But before that, we need more hardware details.</p>
+<p>For each CU, it has smaller units called either warp (Nvidia) or wavefront (AMD). We use the term wavefront in the future passage.</p>
+<p>Each wavefront shares one PC (program counter) register. And within one wavefront, all PE uses the same clock. A typical value of a wavefront is 32.</p>
+<p>When fetching from global memory, the work is done in the unit of half-wavefront. And if the PEs in this half-wavefront wants a continuous data chunk (for example, 0-31 or 32-63), it will done in one go, instead of one by one.</p>
+<p>What this teaches us? Well, when fetching from global memory, we should ensure that PE fetches should be as continuous as possible, in order to take advantage of this.</p>
+<p>Let's check our code with global memory fetching-</p>
+<pre><code class="language-c">sum += A[row * N + i] * B[i * N + col];
+</code></pre>
+<p>From <code>A</code>, for each half-wavefront, we retrieve a continuous space of data. But for <code>B</code>, it is not. How to fix? It's simple, use <code>B_T</code> instead.</p>
+<pre><code class="language-c">__kernel void matrix_multiply(
+    __global float* A, 
+    __global float* B_T,
+    __global float* C, 
+    const unsigned int N
+) {
+    int row = get_global_id(0);
+    int col = get_global_id(1);
+    float sum = 0.0f;
+
+    for (int i = 0; i &lt; N; i++) {
+        sum += A[row * N + i] * B_T[col * N + i];
+    }
+
+    C[row * N + col] = sum;
+}
+</code></pre>
+<p>I'm on Apple Silicon so the architecture is different, thus memory coalescing doesn't yield improvement, but it is important for most GPUs.</p>
+<h3 id="tweaking-work-group-size">Tweaking Work Group Size</h3>
+<p>For each architecture, when the work group size matches the PEs in a CU, it typically yield good improvement. However, this is also relative to the global memory fetching and other details. But using matched size can be a good start. Then we can further try to optimize the work group size.</p>
+<p>I chose,</p>
+<pre><code class="language-rust">let kernel = pro_que.kernel_builder(&quot;matrix_multiply&quot;)
+    .arg(&amp;buffer_a)
+    .arg(&amp;buffer_b)
+    .arg(&amp;buffer_c)
+    .arg(m_n as u32)
+    .local_work_size([8, 8])
+    .build()?;
+</code></pre>
+<p>And the time taken is 250ms, which is a huge improvement. We will call it an end here for matrix multiplication.</p>
+<h3 id="utilizing-local-memory">Utilizing Local Memory</h3>
+<p>This is another trick- previously, we talked about how memory coalescing can reduce global memory fetching. Can we do it further? Yes.</p>
+<p>The secret is using local memory. We can make a workgroup fetch global memory only once, store it in the local memory, so that instead of each work item fetching it, each workgroup fetches it only once.</p>
+<p>How do we do that? We need to calculate the size of the workgroup (I hardcoded it but you can get it using functions). And prepare the local memory.</p>
+<pre><code class="language-c">const unsigned int TILE_SIZE = 8;
+
+// Thread indices within the workgroup
+int row = get_local_id(0);
+int col = get_local_id(1);
+
+// Global indices for A and B_T in the entire matrix
+int global_row = get_group_id(0) * TILE_SIZE + row;
+int global_col = get_group_id(1) * TILE_SIZE + col;
+
+// Local memory to store tiles of A and B_T
+__local float local_A[TILE_SIZE][TILE_SIZE];
+__local float local_B_T[TILE_SIZE][TILE_SIZE];
+</code></pre>
+<p>Then, we ask each PE to load a block of <code>A</code> and <code>B_T</code> from global memory to local memory. Because of memory coalescing, it is done in one go.</p>
+<pre><code class="language-c"> for (int k = 0; k &lt; N / TILE_SIZE; k++) {
+    // Load a block of A from global memory to local memory
+    local_A[row][col] = A[global_row * N + (k * TILE_SIZE + col)];
+
+    // Load a block of B_T (transposed B) from global memory to local memory
+    local_B_T[row][col] = B_T[global_col * N + (k * TILE_SIZE + row)];
+
+    // Synchronize threads to make sure all threads have finished loading data
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // Perform the multiplication and accumulation for the tile
+    for (int i = 0; i &lt; TILE_SIZE; i++) {
+        sum += local_A[row][i] * local_B_T[col][i];
+    }
+
+    // Synchronize to ensure all threads are done with the current computation before moving to the next
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+</code></pre>
+<p>We must use <code>barrier(CLK_LOCAL_MEM_FENCE);</code> to synchronize workgroup. Otherwise, because PE may store the fetched data into the local memory at different time (fetching is done in one but not storing), the result will be wrong.</p>
+<p>Whenever you are about to write to the local memory, a rule of thumb is to do synchronization before and after. Of course, synchronization costs time, so do as few as you can.</p>
+<p>Originally, we need <code>2N</code> times global fetching. But now, we only need <code>2N / TILE_SIZE</code> times global fetching.</p>
+<pre><code class="language-c">__kernel void matrix_multiply(
+    __global float* A, 
+    __global float* B_T,
+    __global float* C, 
+    const unsigned int N
+) {
+    // Tile size (assuming 8x8 workgroup size)
+    const unsigned int TILE_SIZE = 8;
+
+    // Thread indices within the workgroup
+    int row = get_local_id(0);
+    int col = get_local_id(1);
+
+    // Global indices for A and B_T in the entire matrix
+    int global_row = get_group_id(0) * TILE_SIZE + row;
+    int global_col = get_group_id(1) * TILE_SIZE + col;
+
+    // Local memory to store tiles of A and B_T
+    __local float local_A[TILE_SIZE][TILE_SIZE];
+    __local float local_B_T[TILE_SIZE][TILE_SIZE];
+
+    float sum = 0.0f;
+
+    // Loop through the tiles of A and B_T
+    for (int k = 0; k &lt; N / TILE_SIZE; k++) {
+        // Load a block of A from global memory to local memory
+        local_A[row][col] = A[global_row * N + (k * TILE_SIZE + col)];
+
+        // Load a block of B_T (transposed B) from global memory to local memory
+        local_B_T[row][col] = B_T[global_col * N + (k * TILE_SIZE + row)];
+
+        // Synchronize threads to make sure all threads have finished loading data
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        // Perform the multiplication and accumulation for the tile
+        for (int i = 0; i &lt; TILE_SIZE; i++) {
+            sum += local_A[row][i] * local_B_T[col][i];
+        }
+
+        // Synchronize to ensure all threads are done with the current computation before moving to the next
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    // Write the result to the global memory (C matrix)
+    if (global_row &lt; N &amp;&amp; global_col &lt; N) {
+        C[global_row * N + global_col] = sum;
+    }
+}
+</code></pre>
+<p>Not the time reduced to 40ms! This is great achievements. But please note that to make local memory efficient, you must first do memory coalescing, which, albeit didn't yield much improvement, is still important.</p>
+<p>Now we call it an end for matrix multiplication. There are only two more trick left, not included in this case.</p>
+<h2 id="avoid-bank-conflicts">Avoid Bank Conflicts</h2>
+<p>We haven't done with local memories- in reality, local memories are stored in banks- usually the same size as half-wavefront.</p>
+<p>The way of storing is lower-bit based. For example, index modulus half-wavefront zero will be stored in bank 0, and index modulus half-wavefront one will be stored in bank 1, etc.</p>
+<p>Each bank has its own memory controller, and they are independent. Let's consider the following case,</p>
+<p>Assume the half-wavefront size is 4.</p>
+<ul>
+<li>Local Id 0 wants to read from bank 0</li>
+<li>Local Id 1 also wants to read from bank 0</li>
+<li>Local Id 2 wants to read from bank 1</li>
+<li>Local Id 3 also wants to read from bank 1</li>
+</ul>
+<p>What would happen? Local Id 0 and Local Id 2 will get their data from the bank 0 and 1, then bank 0 and 1 serves Local Id 1 and 3, which is called, a bank conflict.</p>
+<p>How to solve this? The rule is simple- don't read from the same bank at the same time. You can copy an extra local memory to avoid this, in this case.</p>
+<h2 id="branching-is-bad">Branching is Bad</h2>
+<p>This is a very simple rule that doesn't need much explanation, but why?</p>
+<p>Like we just talked, each wavefront shares a PC register, so let's consider the following code,</p>
+<pre><code class="language-c">int x = 2;
+if(mask[get_global_id(0)]) {
+    x = 1;
+}
+else {
+    x = 0;
+}
+</code></pre>
+<p>If a wavefront meets <code>if(mask[get_global_id(0)])</code>, and they have the same mask value, then it is fine. But what if not? They share the same PC register that they can't take the same path. This is called a warefront divergence.</p>
+<p>Encountered by divergence, the actual execution will be like,</p>
+<pre><code class="language-c">int x = 2;
+int x_branch_true = 1;
+int x_branch_false = 0;
+x = select(mask[get_global_id(0)], x_branch_true, x_branch_false);
+</code></pre>
+<p>Yes, both if and else branches will be executed. So it slows down the performance. Thus, we should avoid using <code>if-else</code> in our programs.</p>
+<p>The above code is simple, but what if there are thousands of lines? It will be disastrous. Thus, put in as few code in the branch as possible.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

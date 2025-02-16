@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/introduction-to-opencl/02/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Writing OpenCL Programs and OpenCL C - Introduction to OpenCL</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Introduction to OpenCL</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href="../01/" class="nav-link">The Models in OpenCL</a>
+                            </li>
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">Writing OpenCL Programs and OpenCL C</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../03/" class="nav-link">Optimizing an OpenCL Program</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../01/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../03/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#writing-opencl-programs-and-opencl-c" class="nav-link">Writing OpenCL Programs and OpenCL C</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#write-a-opencl-program-in-rust" class="nav-link">Write a OpenCL Program in Rust</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#opencl-c" class="nav-link">OpenCL C</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="writing-opencl-programs-and-opencl-c">Writing OpenCL Programs and OpenCL C</h1>
+<p>Now we write some OpenCL Programs. OpenCL provides binding for C, and people, of course, have bind that to many languages, including Python, C++, Rust. Because Rust has a very good binding that is extremely easy to use, we will use Rust to write our programs.</p>
+<p>This series focus on practice, and before start writing any OpenCL code, we need to request a platform, request a device, create a context, create a command queue, compile a program, create buffers, send the program...</p>
+<p><code>ocl</code> library provides an excellent <code>ProQue</code> type that eliminates the first few steps, so that we can focus on the essence of parallel programming instead of the trivial.</p>
+<p>If you want to know how to do that traditionally, or fetch the details of each component, please refer to their <a href="https://github.com/cogciprocate/ocl/blob/master/ocl/examples/info.rs">example</a>.</p>
+<p>Bindings for other programming languages typically don't have such a convenient feature, so you'll do the whole venial task above.</p>
+<p>Now let's start writing some OpenCL programs. The first program is vector sum.</p>
+<h2 id="write-a-opencl-program-in-rust">Write a OpenCL Program in Rust</h2>
+<p>You'll use <code>cargo</code> to create a new project, then add <code>ocl</code> to the dependency.</p>
+<pre><code class="language-rust">extern crate ocl;
+use ocl::ProQue;
+
+fn task() -&gt; ocl::Result&lt;()&gt; {
+    let src = r#&quot;
+        __kernel void add(__global float* buffer, float scalar) {
+            buffer[get_global_id(0)] += scalar;
+        }
+    &quot;#;
+
+    let pro_que = ProQue::builder()
+        .src(src)
+        .dims(1 &lt;&lt; 4)
+        .build()?;
+
+    let buffer = pro_que.create_buffer::&lt;f32&gt;()?;
+
+    let kernel = pro_que.kernel_builder(&quot;add&quot;)
+        .arg(&amp;buffer)
+        .arg(10.0f32)
+        .build()?;
+
+    unsafe { kernel.enq()?; }
+
+    let mut vec = vec![0.0f32; buffer.len()];
+    buffer.read(&amp;mut vec).enq()?;
+
+    println!(&quot;The value at index [{}] is now '{}'!&quot;, 1, vec[1]);
+    Ok(())
+}
+
+fn main() {
+    task().unwrap();
+}
+</code></pre>
+<p>The program is simple- we just add <code>10</code> to each element of the input vector.</p>
+<p>Now let's break it down.</p>
+<h3 id="the-opencl-c-program">The OpenCL C Program</h3>
+<p>OpenCL C has special syntax. Now you need to know the following ones,</p>
+<ul>
+<li><code>__kernel</code> to declare a function to be a kernel function. Only kernel function can be called from the host. Please note that kernel function can only have <code>void</code> as return value, since, it is called from the host. The way in which the host receive the result is by reading from a buffer. </li>
+<li><code>__global</code> to declare a pointer to the global memory.</li>
+<li><code>__private</code> to declare a pointer to the private memory. If you don't write anything for a pointer, it is default to <code>__private</code>.</li>
+<li><code>get_global_id(dim)</code> is to get the index of the work item that this PE is assigned to.</li>
+</ul>
+<p>Please distinguish kernel function from kernel. Kernel function is a function that can be later compiled to a kernel (a task to be executed) if we supply it with arguments. Kernel is the actual task that is sent to the device.</p>
+<p>The pass-by-value acts the same as in C, it is just that the local variables are stored in the private memory.</p>
+<p>For the following program,</p>
+<pre><code class="language-c">__kernel void add(__global float* buffer, float scalar) {
+    buffer[get_global_id(0)] += scalar;
+}
+</code></pre>
+<p>This means that, for the <code>(i, _, _)</code> work item, it will add <code>scalar</code> to the value at the index <code>i</code> of <code>buffer</code>.</p>
+<h3 id="proque"><code>ProQue</code></h3>
+<p><code>ProQue</code> is a utility chimera that has everything we need- we just take the default <code>ProQue</code>, then it will create the platform, device, context, program queue, and give us a command queue with the program. We need to specify our ND range when creating the <code>ProQue</code>, and the program source code.</p>
+<p>We said that ND Range is a three element tuple. We can use three <code>dim</code> method to set that up in the builder in order. If we don't set a dimension, it is defaulted to one.</p>
+<h3 id="buffer">Buffer</h3>
+<p>We previously claimed that the global and constant global memory of a device are interoperable between itself and the host, which is done by buffer.</p>
+<p>The buffer is simple- we allocate a chunk of host memory in the host machine, then its content will be sent to another chunk of memory in the global or global constant memory of the device as we execute the kernel. After the execution, mapped chunk of global memory will be written back to the host memory. Thus, if we operate the global memory buffer, we can later get our value on the host machine.</p>
+<p>By default, <code>create_buffer</code> creates a buffer that is of the same length as the product of the ND Range. If you want more customization, use <code>buffer_builder</code>.</p>
+<pre><code class="language-rust">let buffer = pro_que.buffer_builder().fill_val(0.0f32).len(1 &lt;&lt; 4).build()?;
+</code></pre>
+<h3 id="compile-the-kernel">Compile the Kernel</h3>
+<p>Previously, we only put the source code into the <code>ProQue</code> as a string. Now we use <code>kernel_builder</code> to create the kernel.</p>
+<pre><code class="language-rust">let kernel = pro_que.kernel_builder(&quot;add&quot;)
+    .arg(&amp;buffer)
+    .arg(10.0f32)
+    .build()?;
+</code></pre>
+<p>We first specify the name, then provide the arguments in order.</p>
+<h3 id="execute-the-kernel">Execute the Kernel</h3>
+<p>Now we just sent the kernel to the device.</p>
+<pre><code class="language-rust">unsafe { kernel.enq()?; }
+</code></pre>
+<p>Please note that this operation is asynchronous, that the code doesn't block and wait for the device to finish.</p>
+<h3 id="read-the-result">Read the Result</h3>
+<p>Then we send a command to instruct the device to copy the data back to the host machine.</p>
+<pre><code class="language-rust">let mut vec = vec![0.0f32; buffer.len()];
+buffer.read(&amp;mut vec).enq()?;
+</code></pre>
+<p>I/O is synchronous, that the code will block and wait for the device to finish.</p>
+<p>Keep in mind that queue is FIFO, so the device will always finish the kernel, then read the result to the host.</p>
+<h2 id="opencl-c">OpenCL C</h2>
+<p>Okay, previous part we write our first program. However, there are many OpenCL C things that are different from standard C.</p>
+<p>You need to remember the following things to write correct OpenCL C,</p>
+<ul>
+<li>OpenCL C generally follows C99.</li>
+<li>OpenCL C pointers always have a memory location prefix. If omitted, it is <code>__private</code>.</li>
+<li><code>__kernel</code> function must return void.</li>
+<li>No double pointer.</li>
+<li>No function pointer.</li>
+<li>No recursion.</li>
+<li><code>struct</code> and <code>union</code> exists and can be used, but may slow down the process.</li>
+<li>No library.</li>
+<li>Limited support for inline and static functions.</li>
+<li>No <code>goto</code>.</li>
+</ul>
+<p>And there are some extra functions and types that are important,</p>
+<h3 id="vector-types">Vector Types</h3>
+<p>OpenCL C has a number of vector types. The most important ones are,</p>
+<ul>
+<li><code>&lt;type&gt;2</code> for 2D vector. This <code>&lt;type&gt;</code> means any native type, for example, <code>float2</code>, <code>int2</code>, etc.</li>
+<li><code>&lt;type&gt;3</code> for 3D vector.</li>
+<li><code>&lt;type&gt;4</code> for 4D vector.</li>
+</ul>
+<h3 id="work-item-functions">Work-Item Functions</h3>
+<ul>
+<li><code>get_global_id(dim)</code> is to get the index of the work item that this PE is assigned to.</li>
+<li><code>get_local_id(dim)</code> is to get the offset of the work item that this PE is assigned to within the workgroup.</li>
+<li><code>get_group_id(dim)</code> is to get the index of the work group that this PE is assigned to.</li>
+</ul>
+<p>The <code>dim</code> should be one of zero, one, or two.</p>
+<p>It may seem hard to understand. Let's use a simple example (all count from zero, that is there are 0th)- we have work items 0 to 15, with each work group has a size of 4, and we have 16 PEs (0 to 15). If we always assume that the distribution is in order. For the 6th PE, it will process the work item 6, and so, the <code>get_global_id(0)</code> is <code>6</code>. The <code>get_local_id(0)</code> is <code>2</code>, because the 6th PE got the second work item in this workgroup. And for the 6th PE, it's <code>get_group_id(0)</code> is <code>1</code>, because the 6th PE processes tasks in the first work group.</p>
+<p>Still in the previous scenario, if we have work items 0 to 31, in the second go, the <code>get_global_id(0)</code> for the 6th PE will be <code>22</code>, because it gets the 22th work item in the second go. The <code>get_local_id(0)</code> is still <code>2</code> because, while the <code>get_group_id(0)</code> will be <code>5</code>.</p>
+<p>If the work items are not in order, we just logically re-label all the PE and CUs.</p>
+<p>In summary, you can think of <code>global_id</code> and <code>group_id</code> as a parameter, where as <code>local_id</code> as a physical parameter that indicates which PE we are using in the CU. This will came into use later.</p>
+<ul>
+<li><code>get_global_size(dim)</code> is to get the total length of the ND Range on a dim.</li>
+<li><code>get_work_dim()</code> is to get the ND Range dimension.</li>
+<li><code>get_local_size(dim)</code> is to get the size of the work group.</li>
+<li><code>get_num_work_groups(dim)</code> is to get the number of work groups.</li>
+</ul>
+<h3 id="branching-functions">Branching Functions</h3>
+<p><code>if-else</code> is extremely slow in GPU- we will talk about that later. So the following functions are preferred,</p>
+<ul>
+<li><code>select(c, a, b)</code> is to select <code>a</code> if <code>c</code> is true, otherwise select <code>b</code>.</li>
+<li><code>max(a, b)</code> is to select the maximum of <code>a</code> and <code>b</code>.</li>
+<li><code>min(a, b)</code> is to select the minimum of <code>a</code> and <code>b</code>.</li>
+</ul>
+<h3 id="atomic-functions">Atomic Functions</h3>
+<p>These functions are atomic to resolve race condition- we can't use lock here because it's too slow.</p>
+<p>In the following list, <code>p</code> is of type <code>volatile __global int*</code>.</p>
+<ul>
+<li><code>atomic_add(p, val)</code> is to add <code>val</code> to <code>p</code>.</li>
+<li><code>atomic_sub(p, val)</code> is to subtract <code>val</code> from <code>p</code>.</li>
+<li><code>atomic_xchg(p, val)</code> is to exchange <code>p</code> with <code>val</code>.</li>
+<li><code>atomic_inc(p)</code> is to increment <code>p</code> by one.</li>
+<li><code>atomic_dec(p)</code> is to decrement <code>p</code> by one.</li>
+<li><code>atomic_cmpxchg(p, cmp, val)</code> is to compare <code>p</code> with <code>cmp</code> and exchange <code>p</code> with <code>val</code> if they are equal.</li>
+</ul></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
