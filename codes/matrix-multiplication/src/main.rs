@@ -96,6 +96,57 @@ __kernel void matrix_multiply(
 }
 "#;
 
+const src_5: &str = r#"
+__kernel void matrix_multiply(
+    __constant float* A, 
+    __constant float* B_T,
+    __global float* C, 
+    const unsigned int N
+) {
+    // Tile size (assuming 8x8 workgroup size)
+    const unsigned int TILE_SIZE = 8;
+
+    // Thread indices within the workgroup
+    int row = get_local_id(0);
+    int col = get_local_id(1);
+
+    // Global indices for A and B_T in the entire matrix
+    int global_row = get_group_id(0) * TILE_SIZE + row;
+    int global_col = get_group_id(1) * TILE_SIZE + col;
+
+    // Local memory to store tiles of A and B_T
+    __local float local_A[TILE_SIZE][TILE_SIZE];
+    __local float local_B_T[TILE_SIZE][TILE_SIZE];
+
+    float sum = 0.0f;
+    
+    // Loop through the tiles of A and B_T
+    for (int k = 0; k < N / TILE_SIZE; k++) {
+        // Load a block of A from global memory to local memory
+        local_A[row][col] = A[global_row * N + (k * TILE_SIZE + col)];
+        
+        // Load a block of B_T (transposed B) from global memory to local memory
+        local_B_T[row][col] = B_T[global_col * N + (k * TILE_SIZE + row)];
+
+        // Synchronize threads to make sure all threads have finished loading data
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        // Perform the multiplication and accumulation for the tile
+        for (int i = 0; i < TILE_SIZE; i++) {
+            sum += local_A[row][i] * local_B_T[col][i];
+        }
+
+        // Synchronize to ensure all threads are done with the current computation before moving to the next
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    // Write the result to the global memory (C matrix)
+    if (global_row < N && global_col < N) {
+        C[global_row * N + global_col] = sum;
+    }
+}
+"#;
+
 fn task() -> ocl::Result<()> {
 
     let m_n = 2048;
@@ -112,7 +163,7 @@ fn task() -> ocl::Result<()> {
     }
 
     let pro_que = ProQue::builder()
-        .src(src_4)
+        .src(src_5)
         .dims([m_n, m_n])
         .build()?;
 
