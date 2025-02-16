@@ -1,0 +1,22 @@
+site_name: Introduction to OpenCL
+site_url: https://finger-bone.github.io/introduction-to-opencl/
+site_description: Basis of OpenCL programming, parallel programming, and GPU architecture
+
+theme:
+  name: lux
+  font:
+    text: Inter
+    code: Fira Code
+
+docs_dir: notes
+
+nav:
+- The Models in OpenCL: 01.md
+- Writing OpenCL Programs and OpenCL C: 02.md
+- Optimizing an OpenCL Program: 03.md
+
+extra_javascript:
+- https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+markdown_extensions:
+  mdx_math:
+    enable_dollar_delimiter: true
