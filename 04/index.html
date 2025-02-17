@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/introduction-to-opencl/04/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Physics Example - 2D Heat Transfer - Introduction to OpenCL</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Introduction to OpenCL</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="navitem">
+                                <a href="../01/" class="nav-link">The Models in OpenCL</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../02/" class="nav-link">Writing OpenCL Programs and OpenCL C</a>
+                            </li>
+                            <li class="navitem">
+                                <a href="../03/" class="nav-link">Optimizing an OpenCL Program</a>
+                            </li>
+                            <li class="navitem active">
+                                <a href="./" class="nav-link">Physics Example - 2D Heat Transfer</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../03/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#physics-example-2d-heat-transfer" class="nav-link">Physics Example - 2D Heat Transfer</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#physics-and-math" class="nav-link">Physics and Math</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#implementation" class="nav-link">Implementation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="physics-example-2d-heat-transfer">Physics Example - 2D Heat Transfer</h1>
+<p>In this case we simulate a heat transfer in 2D. This is just for a practice.</p>
+<h2 id="physics-and-math">Physics and Math</h2>
+<p>Here we omits some complex numerical details. We will use forward Euler method- you don't need to care what that is, you only need to follow my equations.</p>
+<p>The equation is,</p>
+<p>
+<script type="math/tex; mode=display">
+\frac{\partial T}{\partial t} = \alpha \nabla^2 T
+</script>
+</p>
+<p>We take <script type="math/tex">\delta t</script> as time step and <script type="math/tex">\delta l</script> as length step. We suppose <code>n</code> as time steps, <code>p</code> as x-axis length steps, and <code>q</code> as y-axis length steps.</p>
+<p>The forward euler method is only stable if,</p>
+<p>
+<script type="math/tex; mode=display">
+\alpha \frac{\delta t}{\delta l^2} < \frac{1}{2}
+</script>
+</p>
+<p>When this equation doesn't hold, we use backward euler method. However, backward euler method requires more math to solve, and converges slower.</p>
+<p>Let's expand the equation to discreet form under forward euler method,</p>
+<p>
+<script type="math/tex; mode=display">
+\frac{\delta T_{n+1, p, q} - T_{n, p, q}}{\delta t} = \alpha \left(\frac{T_{n, p+1, q} - 2 T_{n, p, q} + T_{n, p-1, q}}{\delta l^2} + \frac{T_{n, p, q+1} - 2 T_{n, p, q} + T_{n, p, q-1}}{\delta l^2}\right)
+</script>
+</p>
+<p>Obviously, we can easily solve <script type="math/tex">T_{n + 1, p, q}</script> given the previous time step. That is,</p>
+<p>
+<script type="math/tex; mode=display">
+T_{n + 1, p, q} = T_{n, p, q} + \alpha \left(\frac{T_{n, p+1, q} - 2 T_{n, p, q} + T_{n, p-1, q}}{\delta l^2} + \frac{T_{n, p, q+1} - 2 T_{n, p, q} + T_{n, p, q-1}}{\delta l^2}\right) \delta t
+</script>
+</p>
+<p>We enforce the following boundary conditions, and also add a heat source and initial condition,</p>
+<p>
+<script type="math/tex; mode=display">
+T_{\cdot, \cdot, q_{max}} =  T_{\cdot, p_{max}, \cdot} = 0
+</script>
+</p>
+<p>
+<script type="math/tex; mode=display">
+T_{\cdot, \cdot, 0} = T_{\cdot, 0, \cdot} = 100
+</script>
+</p>
+<p>And initially,</p>
+<p>
+<script type="math/tex; mode=display">
+T_{0, \cdot, \cdot} = 0
+</script>
+</p>
+<p>To make it more complex, we suppose the transfer coefficient <script type="math/tex">\alpha</script> is a second order function of temperature, that is,</p>
+<p>
+<script type="math/tex; mode=display">
+\alpha(T) = \alpha_0 + \alpha_1 T + \alpha_2 T^2
+</script>
+</p>
+<h2 id="implementation">Implementation</h2>
+<pre><code class="language-rust">use ocl::ProQue;
+use plotly::{common::{ColorScale, ColorScalePalette}, HeatMap, Layout, Plot};
+use indicatif::ProgressBar;
+
+const KERNEL_SRC: &amp;str = include_str!(&quot;kernel.cl&quot;);
+
+fn main() -&gt; ocl::Result&lt;()&gt; {
+    // Simulation parameters
+    let size_x = 512;       // Grid size in x-direction
+    let size_y = 512;       // Grid size in y-direction
+    let dt = 0.001f32;          // Time step
+    let dl = 1f32;           // Spatial step
+    let a0 = 10.0f32;           // α₀ coefficient
+    let a1 = 0.01f32;         // α₁ coefficient
+    let a2 = 0.0001f32;        // α₂ coefficient
+    let num_steps = 1000000;    // Number of time steps
+
+    // Initialize OpenCL
+    let pro_que = ProQue::builder()
+        .src(KERNEL_SRC)
+        .dims((size_x, size_y))
+        .build()?;
+
+    // Create initial temperature field
+    let temp_data = vec![0.0f32; size_x * size_y];
+
+    // Create double buffers
+    let buffers = vec![
+        pro_que.create_buffer::&lt;f32&gt;()?,
+        pro_que.create_buffer::&lt;f32&gt;()?,
+    ];
+
+    // Initialize buffers
+    buffers[0].write(&amp;temp_data).enq()?;
+    buffers[1].write(&amp;temp_data).enq()?;
+    // Create kernel
+    let kernel = pro_que.kernel_builder(&quot;next_step&quot;)
+        .arg(&amp;buffers[0])  // Initial T_current buffer
+        .arg(&amp;buffers[1])  // Initial T_next buffer
+        .arg(dt)
+        .arg(dl)
+        .arg(a0)
+        .arg(a1)
+        .arg(a2) 
+        .local_work_size([16, 16])
+        .build()?;
+
+    let pb = ProgressBar::new(num_steps as u64);
+    let mut computation_time = std::time::Duration::new(0, 0);
+    let mut start_time = std::time::Instant::now();
+    // Simulation loop
+    for step in 0..num_steps {
+        pb.inc(1);
+        let (current_idx, next_idx) = (step % 2, (step + 1) % 2);
+
+        // Set kernel arguments
+        kernel.set_arg(0, &amp;buffers[current_idx])?;
+        kernel.set_arg(1, &amp;buffers[next_idx])?;
+        // Execute kernel
+        unsafe { kernel.enq()?; }
+
+        // Read results
+        let mut temp_result = vec![0.0f32; size_x * size_y];
+        buffers[next_idx].read(&amp;mut temp_result).enq()?;
+        computation_time += start_time.elapsed();
+        start_time = std::time::Instant::now();
+        // Visualize
+        if step % (num_steps / 10) == ((num_steps / 10) - 1){
+            plot_temperature(&amp;temp_result, size_x, size_y, step).unwrap();
+        }
+    }
+    println!(&quot;Time elapsed: {:.2?}&quot;, computation_time);
+
+    Ok(())
+}
+
+fn plot_temperature(
+    temperature: &amp;[f32],
+    size_x: usize,
+    size_y: usize,
+    step: usize
+) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    // Prepare data matrix (transposed for correct orientation)
+    let z: Vec&lt;Vec&lt;f32&gt;&gt; = (0..size_y)
+        .map(|y| (0..size_x).map(|x| temperature[x * size_y + y]).collect())
+        .collect();
+
+    // Create heatmap trace
+    let trace = HeatMap::new(
+        (0..size_x).map(|x| x as i32).collect(),  // X coordinates
+        (0..size_y).map(|y| y as i32).collect(),  // Y coordinates
+        z
+    )
+    .name(&quot;Temperature&quot;)
+    .color_scale(ColorScale::Palette(ColorScalePalette::RdBu));
+
+    // Create plot layout
+    let layout = Layout::new()
+        .title(format!(&quot;Heat Distribution - Step {}&quot;, step).as_str())
+        .x_axis(plotly::layout::Axis::new().title(&quot;X Position&quot;))
+        .y_axis(plotly::layout::Axis::new().title(&quot;Y Position&quot;))
+        .width(800)
+        .height(800);
+
+    // Create and save plot
+    let mut plot = Plot::new();
+    plot.add_trace(trace);
+    plot.set_layout(layout);
+    plot.write_html(format!(&quot;output/heatmap_step_{}.html&quot;, step));
+
+    Ok(())
+}
+</code></pre>
+<pre><code class="language-c">__kernel void next_step(
+    __constant float* T_current,
+    __global float* T_next,
+    const float dt,
+    const float dl,
+    const float a0,
+    const float a1,
+    const float a2
+) {
+    int p = get_global_id(0);
+    int q = get_global_id(1);
+
+    int size_x = get_global_size(0);
+    int size_y = get_global_size(1);
+
+    if (p == 0 || q == 0) {
+        T_next[p * size_y + q] = 100.0f;
+    } else if (p == size_x - 1 || q == size_y - 1) {
+        T_next[p * size_y + q] = 0.0f;
+    } else {
+        float current_T = T_current[p * size_y + q];
+
+        float T_p_plus1 = T_current[(p + 1) * size_y + q];
+        float T_p_minus1 = T_current[(p - 1) * size_y + q];
+        float T_q_plus1 = T_current[p * size_y + (q + 1)];
+        float T_q_minus1 = T_current[p * size_y + (q - 1)];
+
+        float divider = dl * dl;
+        float laplacian_x = (T_p_plus1 - 2.0f * current_T + T_p_minus1);
+        float laplacian_y = (T_q_plus1 - 2.0f * current_T + T_q_minus1);
+
+        float alpha = a0 + a1 * current_T + a2 * current_T * current_T;
+        float delta_T = alpha * (laplacian_x + laplacian_y) * dt;
+
+        T_next[p * size_y + q] = current_T + delta_T;
+    }
+}
+</code></pre>
+<p>There isn't much room for optimization here- because the whole process is already continuous enough, and the fetching are almost all necessary. If we use local memory, there will be overlapped fetching (two PE asking for the same data), thus it is not parallel and performance will be reduced. Thus, this is perhaps the best performance we can have with our knowledge.</p>
+<p>Time taken 418s. The result is as below,</p>
+<p>{% include "heatmap_step_99999.html" %}</p>
+<p>{% include "heatmap_step_599999.html" %}</p>
+<p>{% include "heatmap_step_999999.html" %}</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

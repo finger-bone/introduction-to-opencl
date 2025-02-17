@@ -39,6 +39,9 @@
                             <li class="navitem active">
                                 <a href="./" class="nav-link">Optimizing an OpenCL Program</a>
                             </li>
+                            <li class="navitem">
+                                <a href="../04/" class="nav-link">Physics Example - 2D Heat Transfer</a>
+                            </li>
                         </ul>
 
                     <ul class="nav navbar-nav ml-auto">
@@ -53,7 +56,7 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a rel="next" class="nav-link disabled">
+                                <a rel="next" href="../04/" class="nav-link">
                                     Next <i class="fa fa-arrow-right"></i>
                                 </a>
                             </li>
@@ -375,15 +378,22 @@ __kernel void matrix_multiply(
 <p>We aren't done with local memories- in reality, local memories are stored in banks- usually the same size as half-wavefront.</p>
 <p>The way of storing is lower-bit based. For example, index modulus half-wavefront zero will be stored in bank 0, and index modulus half-wavefront one will be stored in bank 1, etc.</p>
 <p>Each bank has its own memory controller, and they are independent. Let's consider the following case,</p>
-<p>Assume the half-wavefront size is 4.</p>
+<p>Assume the half-wavefront size is 4. We assume <code>x</code> by <code>y</code> means index <script type="math/tex">y * row + x</script>. If we use row length 4.</p>
 <ul>
-<li>Local Id 0 wants to read from bank 0</li>
-<li>Local Id 1 also wants to read from bank 0</li>
-<li>Local Id 2 wants to read from bank 1</li>
-<li>Local Id 3 also wants to read from bank 1</li>
+<li>Local Id 0 wants to read from bank 0, at memory address 0 by 0</li>
+<li>Local Id 1 also wants to read from bank 0 at memory address 1 by 0</li>
+<li>Local Id 2 wants to read from bank 1 at memory address 0 by 1</li>
+<li>Local Id 3 also wants to read from bank 1 at memory address 1 by 1</li>
 </ul>
 <p>What would happen? Local Id 0 and Local Id 2 will get their data from the bank 0 and 1, then bank 0 and 1 serves Local Id 1 and 3, which is called, a bank conflict.</p>
-<p>How to solve this? The rule is simple- don't read from the same bank at the same time. You can copy an extra local memory to avoid this, in this case.</p>
+<p>How to solve this? The rule is simple- don't read from the same bank at the same time. A common trick is to introduce extra prime (including one) padding. Here if we add 3 padding, then,</p>
+<ul>
+<li>Local Id 0 wants to read from bank 0, at memory address 0 by 0</li>
+<li>Local Id 1 wants to read from bank 2 at memory address 1 by 0</li>
+<li>Local Id 2 wants to read from bank 1 at memory address 0 by 1</li>
+<li>Local Id 3 wants to read from bank 3 at memory address 1 by 1</li>
+</ul>
+<p>Thus resolving the bank conflict.</p>
 <h2 id="branching-is-bad">Branching is Bad</h2>
 <p>This is a very simple rule that doesn't need much explanation, but why?</p>
 <p>Like we just talked, each wavefront shares a PC register, so let's consider the following code,</p>
@@ -403,7 +413,8 @@ int x_branch_false = 0;
 x = select(mask[get_global_id(0)], x_branch_true, x_branch_false);
 </code></pre>
 <p>Yes, both if and else branches will be executed. So it slows down the performance. Thus, we should avoid using <code>if-else</code> in our programs.</p>
-<p>The above code is simple, but what if there are thousands of lines? It will be disastrous. Thus, put in as few code in the branch as possible.</p></div>
+<p>The above code is simple, but what if there are thousands of lines? It will be disastrous. Thus, put in as few code in the branch as possible.</p>
+<p>This doesn't mean you shouldn't use branches- they are unavoidable. But you need to remember that instead of the cost of one branch, the actual cost is the sum of all the branches.</p></div>
             </div>
         </div>
 

@@ -39,6 +39,9 @@
                             <li class="navitem">
                                 <a href="../03/" class="nav-link">Optimizing an OpenCL Program</a>
                             </li>
+                            <li class="navitem">
+                                <a href="../04/" class="nav-link">Physics Example - 2D Heat Transfer</a>
+                            </li>
                         </ul>
 
                     <ul class="nav navbar-nav ml-auto">
@@ -203,9 +206,12 @@ buffer.read(&amp;mut vec).enq()?;
 <p>OpenCL C has a number of vector types. The most important ones are,</p>
 <ul>
 <li><code>&lt;type&gt;2</code> for 2D vector. This <code>&lt;type&gt;</code> means any native type, for example, <code>float2</code>, <code>int2</code>, etc.</li>
-<li><code>&lt;type&gt;3</code> for 3D vector.</li>
-<li><code>&lt;type&gt;4</code> for 4D vector.</li>
+<li><code>&lt;type&gt;3</code></li>
+<li><code>&lt;type&gt;4</code></li>
+<li><code>&lt;type&gt;8</code></li>
+<li><code>&lt;type&gt;16</code></li>
 </ul>
+<p>There is no more than 16.</p>
 <h3 id="work-item-functions">Work-Item Functions</h3>
 <ul>
 <li><code>get_global_id(dim)</code> is to get the index of the work item that this PE is assigned to.</li>
