@@ -5,3 +5,4 @@ These notes presents the basis of OpenCL programming, parallel programming, and 
 - [The Models in OpenCL](01.md)
 - [Writing OpenCL Programs and OpenCL C](02.md)
 - [Optimizing an OpenCL Program](03.md)
+- [Physics Example - 2D Heat Transfer](04.md)
