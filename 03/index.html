@@ -262,6 +262,7 @@ __local float local_B_T[TILE_SIZE][TILE_SIZE];
 }
 </code></pre>
 <p>We must use <code>barrier(CLK_LOCAL_MEM_FENCE);</code> to synchronize workgroup. Otherwise, because PE may store the fetched data into the local memory at different time (fetching is done in one but not storing), the result will be wrong.</p>
+<p>The function of this line is to synchronize all across the workgroup. A wavefront shares a clock, not a workgroup. After we write this line, all PEs will wait until every PE in the same workgroup reaches this line.</p>
 <p>Whenever you are about to write to the local memory, a rule of thumb is to do synchronization before and after. Of course, synchronization costs time, so do as few as you can.</p>
 <p>Originally, we need <code>2N</code> times global fetching. But now, we only need <code>2N / TILE_SIZE</code> times global fetching.</p>
 <pre><code class="language-c">__kernel void matrix_multiply(
