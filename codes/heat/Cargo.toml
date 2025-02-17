@@ -1,0 +1,10 @@
+[package]
+name = "heat"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+indicatif = "0.17.11"
+num-traits = "0.2.19"
+ocl = "0.19.7"
+plotly = "0.12.1"
