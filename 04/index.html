@@ -294,7 +294,7 @@ fn plot_temperature(
         float laplacian_y = (T_q_plus1 - 2.0f * current_T + T_q_minus1);
 
         float alpha = a0 + a1 * current_T + a2 * current_T * current_T;
-        float delta_T = alpha * (laplacian_x + laplacian_y) * dt;
+        float delta_T = alpha * (laplacian_x + laplacian_y) * dt / divider;
 
         T_next[p * size_y + q] = current_T + delta_T;
     }
