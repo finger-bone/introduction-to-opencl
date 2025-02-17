@@ -372,7 +372,7 @@ __kernel void matrix_multiply(
 <p>Now the time becomes 55ms. Not very huge improvement, but percentage-wise, it is good.</p>
 <p>Now we call it an end for matrix multiplication. There are only a few more trick left, not included in this case.</p>
 <h2 id="avoid-bank-conflicts">Avoid Bank Conflicts</h2>
-<p>We haven't done with local memories- in reality, local memories are stored in banks- usually the same size as half-wavefront.</p>
+<p>We aren't done with local memories- in reality, local memories are stored in banks- usually the same size as half-wavefront.</p>
 <p>The way of storing is lower-bit based. For example, index modulus half-wavefront zero will be stored in bank 0, and index modulus half-wavefront one will be stored in bank 1, etc.</p>
 <p>Each bank has its own memory controller, and they are independent. Let's consider the following case,</p>
 <p>Assume the half-wavefront size is 4.</p>
