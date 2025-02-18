@@ -18,6 +18,7 @@ nav:
 - Optimization:
   - Optimizing an OpenCL Program: 04.md
   - Further Optimizing an OpenCL Program: 05.md
+- OpenCL C Specification: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_C.html#the-opencl-c-programming-language
 
 extra_javascript:
 - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
