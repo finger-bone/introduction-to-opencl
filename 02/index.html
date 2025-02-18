@@ -54,6 +54,10 @@
 <li>
     <a href="../04/" class="dropdown-item">Optimizing an OpenCL Program</a>
 </li>
+                                    
+<li>
+    <a href="../05/" class="dropdown-item">Further Optimizing an OpenCL Program</a>
+</li>
                                 </ul>
                             </li>
                         </ul>
@@ -233,7 +237,7 @@ buffer.read(&amp;mut vec).enq()?;
 <li><code>get_group_id(dim)</code> is to get the index of the work group that this PE is assigned to.</li>
 </ul>
 <p>The <code>dim</code> should be one of zero, one, or two.</p>
-<p>It may seem hard to understand. Let's use a simple example (all count from zero, that is there are 0th)- we have work items 0 to 15, with each work group has a size of 4, and we have 16 PEs (0 to 15). If we always assume that the distribution is in order. For the 6th PE, it will process the work item 6, and so, the <code>get_global_id(0)</code> is <code>6</code>. The <code>get_local_id(0)</code> is <code>2</code>, because the 6th PE got the second work item in this workgroup. And for the 6th PE, it's <code>get_group_id(0)</code> is <code>1</code>, because the 6th PE processes tasks in the first work group.</p>
+<p>It may seem hard to understand. Let's use a simple example (all count from zero, that is there are 0th)- we have work items 0 to 15, with each work group has a size of 4, and we have 16 PEs (0 to 15). Because the distribution is always in order. For the 6th PE, it will process the work item 6, and so, the <code>get_global_id(0)</code> is <code>6</code>. The <code>get_local_id(0)</code> is <code>2</code>, because the 6th PE got the second work item in this workgroup. And for the 6th PE, it's <code>get_group_id(0)</code> is <code>1</code>, because the 6th PE processes tasks in the first work group.</p>
 <p>Still in the previous scenario, if we have work items 0 to 31, in the second go, the <code>get_global_id(0)</code> for the 6th PE will be <code>22</code>, because it gets the 22th work item in the second go. The <code>get_local_id(0)</code> is still <code>2</code> because, while the <code>get_group_id(0)</code> will be <code>5</code>.</p>
 <p>If the work items are not in order, we just logically re-label all the PE and CUs.</p>
 <p>In summary, you can think of <code>global_id</code> and <code>group_id</code> as a parameter, where as <code>local_id</code> as a physical parameter that indicates which PE we are using in the CU. This will came into use later.</p>

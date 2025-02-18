@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://finger-bone.github.io/introduction-to-opencl/05/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Further Optimizing an OpenCL Program - Introduction to OpenCL</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/color-brewer.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Introduction to OpenCL</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="dropdown">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">Basic Practices <b class="caret"></b></a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../01/" class="dropdown-item">The Models in OpenCL</a>
+</li>
+                                    
+<li>
+    <a href="../02/" class="dropdown-item">Writing OpenCL Programs and OpenCL C</a>
+</li>
+                                    
+<li>
+    <a href="../03/" class="dropdown-item">Physics Example - 2D Heat Transfer</a>
+</li>
+                                </ul>
+                            </li>
+                            <li class="dropdown active">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">Optimization <b class="caret"></b></a>
+                                <ul class="dropdown-menu">
+                                    
+<li>
+    <a href="../04/" class="dropdown-item">Optimizing an OpenCL Program</a>
+</li>
+                                    
+<li>
+    <a href="./" class="dropdown-item active">Further Optimizing an OpenCL Program</a>
+</li>
+                                </ul>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ml-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li class="nav-item">
+                                <a rel="prev" href="../04/" class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" class="nav-link disabled">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-light navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-toggle="collapse" data-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-secondary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-level="1"><a href="#further-optimizing-an-opencl-program" class="nav-link">Further Optimizing an OpenCL Program</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-level="2"><a href="#simds" class="nav-link">SIMDs</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#unrolling" class="nav-link">Unrolling</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#double-buffer-for-prefetching" class="nav-link">Double Buffer for Prefetching</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="further-optimizing-an-opencl-program">Further Optimizing an OpenCL Program</h1>
+<p>Okay, let's do a recapitulation- we introduced divergence in the third chapter, then memory coalescing, utilizing memory hierarchy and tweaking work group size in chapter four to optimize matrix multiplication. </p>
+<p>We ended up with,</p>
+<pre><code class="language-c">__kernel void matrix_multiply(
+    __constant float* A, 
+    __constant float* B_T,
+    __global float* C, 
+    const unsigned int N
+) {
+    // Tile size (assuming 8x8 workgroup size)
+    const unsigned int TILE_SIZE = 8;
+
+    // Thread indices within the workgroup
+    int row = get_local_id(0);
+    int col = get_local_id(1);
+
+    // Global indices for A and B_T in the entire matrix
+    int global_row = get_group_id(0) * TILE_SIZE + row;
+    int global_col = get_group_id(1) * TILE_SIZE + col;
+
+    // Local memory to store tiles of A and B_T
+    __local float local_A[TILE_SIZE][TILE_SIZE];
+    __local float local_B_T[TILE_SIZE][TILE_SIZE];
+
+    float sum = 0.0f;
+
+    // Loop through the tiles of A and B_T
+    for (int k = 0; k &lt; N / TILE_SIZE; k++) {
+        // Load a block of A from global memory to local memory
+        local_A[row][col] = A[global_row * N + (k * TILE_SIZE + col)];
+
+        // Load a block of B_T (transposed B) from global memory to local memory
+        local_B_T[row][col] = B_T[global_col * N + (k * TILE_SIZE + row)];
+
+        // Synchronize threads to make sure all threads have finished loading data
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        // Perform the multiplication and accumulation for the tile
+        for (int i = 0; i &lt; TILE_SIZE; i++) {
+            sum += local_A[row][i] * local_B_T[i][col];
+        }
+
+        // Synchronize to ensure all threads are done with the current computation before moving to the next
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    // Write the result to the global memory (C matrix)
+    if (global_row &lt; N &amp;&amp; global_col &lt; N) {
+        C[global_row * N + global_col] = sum;
+    }
+}
+</code></pre>
+<p>We do not test time for the following method because it is meaningless now- the kernel is already very efficient and these tricks doesn't yield any significant speedup. However, these are still good to know, and would come in handy in the other cases.</p>
+<h2 id="simds">SIMDs</h2>
+<p>SIMD stands for single instruction, multiple data. We consider the following two codes,</p>
+<pre><code class="language-c">float sum = 0.0f;
+for (int i = 0; i &lt; TILE_SIZE; i++) {
+    sum += local_A[row][i] * local_B_T[col][i];
+}
+</code></pre>
+<p>And,</p>
+<pre><code class="language-c">float sum = 0.0f;
+for (int i = 0; i &lt; TILE_SIZE; i += 2) {
+    float2 a = local_A[row][i];
+    float2 b = local_B_T[col][i];
+    sum += a * b;
+}
+</code></pre>
+<p>The latter one sends less sum instruction to the command queue, and thus faster.</p>
+<p>However, the code above is different from our code, thus requiring more tweaks.</p>
+<p>Because our <code>TILE_SIZE</code> is eight, we can actually discard the loop, and use,</p>
+<pre><code class="language-c">_kernel void matrix_multiply(
+    __global float* A, 
+    __global float* B_T,
+    __global float* C, 
+    const unsigned int N
+) {
+    const unsigned int TILE_SIZE = 8;
+    const int row = get_local_id(0);
+    const int col = get_local_id(1);
+    const int global_row = get_group_id(0) * TILE_SIZE + row;
+    const int global_col = get_group_id(1) * TILE_SIZE + col;
+
+    // Local memory with transposed storage for B_T
+    __local float local_A[TILE_SIZE][TILE_SIZE];
+    __local float local_B_T[TILE_SIZE][TILE_SIZE];  // Stored transposed
+
+    float8 sum_vec = (float8)(0.0f);
+
+    for (int k = 0; k &lt; (N + TILE_SIZE - 1)/TILE_SIZE; k++) {
+        // Load tiles with boundary checks
+        const int load_col = k * TILE_SIZE + col;
+        const int load_row = k * TILE_SIZE + row;
+
+        local_A[row][col] = (load_col &lt; N) ? A[global_row * N + load_col] : 0.0f;
+        local_B_T[col][row] = (load_row &lt; N) ? B_T[global_col * N + load_row] : 0.0f;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+
+        float8 a_vec = vload8(0, &amp;local_A[row][0]);
+        float8 b_vec = vload8(0, &amp;local_B_T[row][0]);
+        sum_vec += a_vec * b_vec;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    // Horizontal sum
+    float sum = dot(sum_vec.lo, (float4)(1.0f)) + dot(sum_vec.hi, (float4)(1.0f));
+
+    if(global_row &lt; N &amp;&amp; global_col &lt; N) {
+        C[global_row * N + global_col] = sum;
+    }
+}
+</code></pre>
+<h2 id="unrolling">Unrolling</h2>
+<p>This is of no use here, because our loop runs a small number of times. However, for large loops, you can use,</p>
+<pre><code class="language-c">#pragma unroll 4
+for (int i = 0; i &lt; TILE_SIZE; i++) {
+    sum += local_A[row][i] * local_B_T[i][col];
+}
+</code></pre>
+<p>or,</p>
+<pre><code class="language-c">#pragma unroll
+for (int i = 0; i &lt; TILE_SIZE; i++) {
+    sum += local_A[row][i] * local_B_T[i][col];
+}
+</code></pre>
+<p>To expand the loop, thus avoiding the comparison.</p>
+<h2 id="double-buffer-for-prefetching">Double Buffer for Prefetching</h2>
+<p>The last optimization is very complex, and not really effective for this case- it yields even worse performance. But this part is necessary because it introduces event mechanism.</p>
+<p>We need to remember that every case is different, and unlike traditional programming, parallel programming requires us to do some works that compilers often do in traditional programming.</p>
+<p>Back to the topic, double buffer is a trick, by using two buffer to store data, one for the currently computing data, the other for the data for the next iteration. Because memory access can be asynchronous, the data in the buffer can be ready for the next iteration before the current iteration is done, thus avoiding the data dependency and thus avoiding the stall.</p>
+<p>This trick is sometimes also called memory access hiding in a more general sense. Because the computation time hides the memory access time. Thus, when you write OpenCL code, it is better that you intersect the computation and memory access, instead of having a dedicated part for memory access and then computation.</p>
+<p>OpenCL provides async operation and event mechanism, which is very useful for this kind of optimization.</p>
+<p>For example, OpenCL has a native async function <code>async_work_group_copy</code>, which allows you to copy data from one buffer to another asynchronously. This is useful when you want to copy data from one buffer to another, but don't want to wait for the copy to finish.</p>
+<pre><code class="language-c">event_t event = async_work_group_copy(__local gentype *dst, const __global gentype *src, size_t num_gentypes, event_t event);
+</code></pre>
+<p>Then when we need the data, we can wait for the event to finish.</p>
+<pre><code class="language-c">wait_group_events(int num_events, event_t *event_list)
+</code></pre>
+<p>This is similar to Javascript,</p>
+<pre><code class="language-js">const promise = copy_work(...);
+
+await promise;
+</code></pre>
+<p>Please note that <code>wait_group_events</code> only waits for the operation, and do not synchronize the data. You still need to barrier. But if you use barrier, the events are automatically synchronized. So it can be ignored in this case, but it is good to know.</p>
+<pre><code class="language-c">__kernel void matrix_multiply(
+    __global float* A,
+    __global float* B_T,
+    __global float* C,
+    const unsigned int N
+) {
+    const unsigned int TILE_SIZE = 8;
+    const int row = get_local_id(0);
+    const int col = get_local_id(1);
+    const int global_row = get_group_id(0) * TILE_SIZE + row;
+    const int global_col = get_group_id(1) * TILE_SIZE + col;
+
+    __local float local_A[2][TILE_SIZE][TILE_SIZE];
+    __local float local_B_T[2][TILE_SIZE][TILE_SIZE];
+    int current = 0;
+    float8 sum_vec = (float8)(0.0f);
+
+    int load_col = 0 * TILE_SIZE + col;
+    int load_row = 0 * TILE_SIZE + row;
+    local_A[current][row][col] = (load_col &lt; N) ? A[global_row * N + load_col] : 0.0f;
+    local_B_T[current][col][row] = (load_row &lt; N) ? B_T[global_col * N + load_row] : 0.0f;
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int k = 0; k &lt; (N + TILE_SIZE - 1) / TILE_SIZE; ++k) {
+        int next = 1 - current;
+
+        if (k + 1 &lt; (N + TILE_SIZE - 1) / TILE_SIZE) {
+            int next_load_col = (k + 1) * TILE_SIZE + col;
+            int next_load_row = (k + 1) * TILE_SIZE + row;
+            local_A[next][row][col] = (next_load_col &lt; N) ? A[global_row * N + next_load_col] : 0.0f;
+            local_B_T[next][col][row] = (next_load_row &lt; N) ? B_T[global_col * N + next_load_row] : 0.0f;
+        }
+
+        float8 a_vec = vload8(0, &amp;local_A[current][row][0]);
+        float8 b_vec = vload8(0, &amp;local_B_T[current][row][0]);
+        sum_vec += a_vec * b_vec;
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        current = next;
+    }
+
+    if (global_row &lt; N &amp;&amp; global_col &lt; N) {
+        float sum = dot(sum_vec.lo, (float4)(1.0f)) + dot(sum_vec.hi, (float4)(1.0f));
+        C[global_row * N + global_col] = sum;
+    }
+}
+</code></pre></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/jquery-3.6.0.min.js"></script>
+        <script src="../js/bootstrap.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>

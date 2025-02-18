@@ -54,6 +54,10 @@
 <li>
     <a href="./" class="dropdown-item active">Optimizing an OpenCL Program</a>
 </li>
+                                    
+<li>
+    <a href="../05/" class="dropdown-item">Further Optimizing an OpenCL Program</a>
+</li>
                                 </ul>
                             </li>
                         </ul>
@@ -70,7 +74,7 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a rel="next" class="nav-link disabled">
+                                <a rel="next" href="../05/" class="nav-link">
                                     Next <i class="fa fa-arrow-right"></i>
                                 </a>
                             </li>
@@ -98,11 +102,27 @@
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-level="2"><a href="#avoid-bank-conflicts" class="nav-link">Avoid Bank Conflicts</a>
+            <li class="nav-item" data-level="2"><a href="#avoid-global-memory-unless-necessary" class="nav-link">Avoid Global Memory Unless Necessary</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-level="2"><a href="#branching-is-bad" class="nav-link">Branching is Bad</a>
+            <li class="nav-item" data-level="2"><a href="#memory-coalescing" class="nav-link">Memory Coalescing</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#tweaking-work-group-size" class="nav-link">Tweaking Work Group Size</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#utilizing-local-memory" class="nav-link">Utilizing Local Memory</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#using-constant-memory" class="nav-link">Using Constant Memory</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-level="2"><a href="#avoid-bank-conflicts" class="nav-link">Avoid Bank Conflicts</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -185,7 +205,7 @@ fn main() {
 }
 </code></pre>
 <p>Which takes around 2s to complete on my machine- very bad. How we can build any AI with such a slow performance? We must optimize it.</p>
-<h3 id="avoid-global-memory-unless-necessary">Avoid Global Memory Unless Necessary</h3>
+<h2 id="avoid-global-memory-unless-necessary">Avoid Global Memory Unless Necessary</h2>
 <p>Global memory access is extremely slow. How does this hardware fact help? Well, in our previous code, we have,</p>
 <pre><code class="language-c">C[row * N + col] += A[row * N + i] * B[i * N + col];
 </code></pre>
@@ -200,16 +220,14 @@ C[row * N + col] = sum;
 </code></pre>
 <p>Local variables are stored in the private memory.</p>
 <p>Now let's try again- 950ms, which is less than halved, but still not good.</p>
-<h3 id="memory-coalescing">Memory Coalescing</h3>
-<p>We can further reduce the global memory access by a trick called memory coalescing. But before that, we need more hardware details.</p>
-<p>For each CU, it has smaller units called either warp (Nvidia) or wavefront (AMD). We use the term wavefront in the future passage.</p>
-<p>Each wavefront shares one PC (program counter) register. And within one wavefront, all PE uses the same clock. A typical value of a wavefront is 32.</p>
-<p>When fetching from global memory, the work is done in the unit of half-wavefront. And if the PEs in this half-wavefront wants a continuous data chunk (for example, 0-31 or 32-63), it will done in one go, instead of one by one.</p>
+<h2 id="memory-coalescing">Memory Coalescing</h2>
+<p>We can further reduce the global memory access by a trick called memory coalescing.</p>
+<p>When fetching from global memory, the work is done in the unit of wavefront (half-wavefront in earlier architectures). And if the PEs in this wavefront wants a continuous data chunk (for example, 0-31 or 32-63), it will done in one go, instead of one by one.</p>
 <p>What this teaches us? Well, when fetching from global memory, we should ensure that PE fetches should be as continuous as possible, in order to take advantage of this.</p>
 <p>Let's check our code with global memory fetching-</p>
 <pre><code class="language-c">sum += A[row * N + i] * B[i * N + col];
 </code></pre>
-<p>From <code>A</code>, for each half-wavefront, we retrieve a continuous space of data. But for <code>B</code>, it is not. How to fix? It's simple, use <code>B_T</code> instead.</p>
+<p>From <code>A</code>, for each wavefront, we retrieve a continuous space of data. But for <code>B</code>, it is not. How to fix? It's simple, use <code>B_T</code> instead.</p>
 <pre><code class="language-c">__kernel void matrix_multiply(
     __global float* A, 
     __global float* B_T,
@@ -228,7 +246,7 @@ C[row * N + col] = sum;
 }
 </code></pre>
 <p>I'm on Apple Silicon so the architecture is different, thus memory coalescing doesn't yield improvement, but it is important for most GPUs.</p>
-<h3 id="tweaking-work-group-size">Tweaking Work Group Size</h3>
+<h2 id="tweaking-work-group-size">Tweaking Work Group Size</h2>
 <p>For each architecture, when the work group size matches the PEs in a CU, it typically yield good improvement. However, this is also relative to the global memory fetching and other details. But using matched size can be a good start. Then we can further try to optimize the work group size.</p>
 <p>I chose,</p>
 <pre><code class="language-rust">let kernel = pro_que.kernel_builder(&quot;matrix_multiply&quot;)
@@ -240,7 +258,7 @@ C[row * N + col] = sum;
     .build()?;
 </code></pre>
 <p>And the time taken is 250ms, which is a huge improvement.</p>
-<h3 id="utilizing-local-memory">Utilizing Local Memory</h3>
+<h2 id="utilizing-local-memory">Utilizing Local Memory</h2>
 <p>This is another trick- previously, we talked about how memory coalescing can reduce global memory fetching. Can we do it further? Yes.</p>
 <p>The secret is using local memory. We can make a workgroup fetch global memory only once, store it in the local memory, so that instead of each work item fetching it, each workgroup fetches it only once.</p>
 <p>How do we do that? We need to calculate the size of the workgroup (I hardcoded it but you can get it using functions). And prepare the local memory.</p>
@@ -271,7 +289,7 @@ __local float local_B_T[TILE_SIZE][TILE_SIZE];
 
     // Perform the multiplication and accumulation for the tile
     for (int i = 0; i &lt; TILE_SIZE; i++) {
-        sum += local_A[row][i] * local_B_T[col][i];
+        sum += local_A[row][i] * local_B_T[i][col];
     }
 
     // Synchronize to ensure all threads are done with the current computation before moving to the next
@@ -318,7 +336,7 @@ __local float local_B_T[TILE_SIZE][TILE_SIZE];
 
         // Perform the multiplication and accumulation for the tile
         for (int i = 0; i &lt; TILE_SIZE; i++) {
-            sum += local_A[row][i] * local_B_T[col][i];
+            sum += local_A[row][i] * local_B_T[i][col];
         }
 
         // Synchronize to ensure all threads are done with the current computation before moving to the next
@@ -332,7 +350,7 @@ __local float local_B_T[TILE_SIZE][TILE_SIZE];
 }
 </code></pre>
 <p>Not the time reduced to 60ms! This is great achievements. But please note that to make local memory efficient, you must first do memory coalescing, which, albeit didn't yield much improvement, is still important.</p>
-<h3 id="using-constant-memory">Using Constant Memory</h3>
+<h2 id="using-constant-memory">Using Constant Memory</h2>
 <p>Constant Memory, well, is obviously faster. When you can use constant memory, use it. Otherwise, use global memory.</p>
 <p>To use constant memory, just change the <code>__global</code> to <code>__constant</code>.</p>
 <pre><code class="language-c">const src_5: &amp;str = r#&quot;
@@ -372,7 +390,7 @@ __kernel void matrix_multiply(
 
         // Perform the multiplication and accumulation for the tile
         for (int i = 0; i &lt; TILE_SIZE; i++) {
-            sum += local_A[row][i] * local_B_T[col][i];
+            sum += local_A[row][i] * local_B_T[i][col];
         }
 
         // Synchronize to ensure all threads are done with the current computation before moving to the next
@@ -386,21 +404,20 @@ __kernel void matrix_multiply(
 }
 &quot;#;
 </code></pre>
-<p>Now the time becomes 55ms. Not very huge improvement, but percentage-wise, it is good.</p>
-<p>Now we call it an end for matrix multiplication. There are only a few more trick left, not included in this case.</p>
+<p>This yields a bit of improvement- but this works in related to how little we have modified the code. But this may be crucial in certain cases.</p>
 <h2 id="avoid-bank-conflicts">Avoid Bank Conflicts</h2>
-<p>We aren't done with local memories- in reality, local memories are stored in banks- usually the same size as half-wavefront.</p>
-<p>The way of storing is lower-bit based. For example, index modulus half-wavefront zero will be stored in bank 0, and index modulus half-wavefront one will be stored in bank 1, etc.</p>
+<p>We aren't done with local memories- in reality, local memories are stored in banks- usually the same size as wavefront.</p>
+<p>The way of storing is lower-bit based. For example, index modulus wavefront zero will be stored in bank 0, and index modulus wavefront one will be stored in bank 1, etc.</p>
 <p>Each bank has its own memory controller, and they are independent. Let's consider the following case,</p>
-<p>Assume the half-wavefront size is 4. We assume <code>x</code> by <code>y</code> means index <script type="math/tex">y * row + x</script>. If we use row length 4.</p>
+<p>Assume the wavefront size is 4. We assume <code>x</code> by <code>y</code> means index <script type="math/tex">y * row + x</script>. If we use row length 4.</p>
 <ul>
 <li>Local Id 0 wants to read from bank 0, at memory address 0 by 0</li>
 <li>Local Id 1 also wants to read from bank 0 at memory address 1 by 0</li>
 <li>Local Id 2 wants to read from bank 1 at memory address 0 by 1</li>
 <li>Local Id 3 also wants to read from bank 1 at memory address 1 by 1</li>
 </ul>
-<p>What would happen? Local Id 0 and Local Id 2 will get their data from the bank 0 and 1, then bank 0 and 1 serves Local Id 1 and 3, which is called, a bank conflict.</p>
-<p>How to solve this? The rule is simple- don't read from the same bank at the same time. A common trick is to introduce extra prime (including one) padding. Here if we add 3 padding, then,</p>
+<p>What would happen? Local Id 0 and Local Id 2 will get their data from the bank 0 and 1, then bank 0 and 1 serves Local Id 1 and 3, which is called, a bank conflict. Even if they are accessing different memory location, their work are blocked.</p>
+<p>How to solve this? The rule is simple- don't read from the same bank at the same time. A common trick is to introduce extra padding. Here if we add 2 padding, then,</p>
 <ul>
 <li>Local Id 0 wants to read from bank 0, at memory address 0 by 0</li>
 <li>Local Id 1 wants to read from bank 2 at memory address 1 by 0</li>
@@ -408,27 +425,26 @@ __kernel void matrix_multiply(
 <li>Local Id 3 wants to read from bank 3 at memory address 1 by 1</li>
 </ul>
 <p>Thus resolving the bank conflict.</p>
-<h2 id="branching-is-bad">Branching is Bad</h2>
-<p>This is a very simple rule that doesn't need much explanation, but why?</p>
-<p>Like we just talked, each wavefront shares a PC register, so let's consider the following code,</p>
-<pre><code class="language-c">int x = 2;
-if(mask[get_global_id(0)]) {
-    x = 1;
-}
-else {
-    x = 0;
+<p>Please note that bank conflict is specific to local memory and a wavefront. For the whole workgroup, it is not a problem.</p>
+<p>In addition, if many work item wants the same local memory location, due to hardware broadcast, even if they want access the same bank, there will be no bank conflict.</p>
+<p>Let's consider this line,</p>
+<pre><code class="language-c">for (int i = 0; i &lt; TILE_SIZE; i++) {
+    sum += local_A[row][i] * local_B_T[i][col];
 }
 </code></pre>
-<p>If a wavefront meets <code>if(mask[get_global_id(0)])</code>, and they have the same mask value, then it is fine. But what if not? They share the same PC register that they can't take the same path. This is called a warefront divergence.</p>
-<p>Encountered by divergence, the actual execution will be like,</p>
-<pre><code class="language-c">int x = 2;
-int x_branch_true = 1;
-int x_branch_false = 0;
-x = select(mask[get_global_id(0)], x_branch_true, x_branch_false);
+<p>Is there a bank conflict?</p>
+<p>The answer is, there might be.</p>
+<p>This is because, for a workgroup of size eight by eight. If we assume that a wavefront is 32, then row number covers zero to three. There are bank conflicts, obviously. However, because there are only four rows in a wavefront, and within each wavefront, there can be broadcast that optimizes each row. It mitigates the issue to a quarter.</p>
+<p>However, for col number, there is no broadcast, so more bank conflicts.</p>
+<p>However, both of them failed to utilize all the banks. We can conclude that it is not serious, but not optimal.</p>
+<p>The way to solve? It's simple, just change to,</p>
+<pre><code class="language-c">__local float local_A[TILE_SIZE * (TILE_SIZE + 1)];
+__local float local_B_T[TILE_SIZE * (TILE_SIZE + 1)];
 </code></pre>
-<p>Yes, both if and else branches will be executed. So it slows down the performance. Thus, we should avoid using <code>if-else</code> in our programs.</p>
-<p>The above code is simple, but what if there are thousands of lines? It will be disastrous. Thus, put in as few code in the branch as possible.</p>
-<p>This doesn't mean you shouldn't use branches- they are unavoidable. But you need to remember that instead of the cost of one branch, the actual cost is the sum of all the branches.</p></div>
+<p>This mitigates the bank conflict. Of course, this issue was not serious from the very start, so there are no obvious improvements. In addition that this breaks the originally aligned memory, which cases cache miss.</p>
+<p>However, in other cases, resolving the bank conflict is very important.</p>
+<p>We will not reconcile this issue here.</p>
+<p>Now we call it an end for now. We continue the optimization in the next chapter.</p></div>
             </div>
         </div>
 

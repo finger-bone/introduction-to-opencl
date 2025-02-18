@@ -54,6 +54,10 @@
 <li>
     <a href="../04/" class="dropdown-item">Optimizing an OpenCL Program</a>
 </li>
+                                    
+<li>
+    <a href="../05/" class="dropdown-item">Further Optimizing an OpenCL Program</a>
+</li>
                                 </ul>
                             </li>
                         </ul>
@@ -120,7 +124,7 @@
 <ul>
 <li>Anything we talk about in the future content that can both mean a physical thing and an abstracted thing, unless I add physical before it, I will always mean an abstracted thing on the software side. For example, if I say memory, I mean the memory abstracted by the OpenCL. If I say physical memory, I mean the actually physical memory on the GPU.</li>
 <li>Physical device will be exclusively used for GPU. A complete Computer will not be referred to as a physical device. Computer doesn't need physical prefix because we don't abstract the whole computer.</li>
-<li>CPU in OpenCL emulates a GPU, so we only focus on GPU architecture. Other type of devices usually have a similar architecture to GPU.</li>
+<li>We only focus on GPU architecture. Other type of devices usually have a similar architecture to GPU. For CPU HPC, we usually use OpenMP for better performance.</li>
 </ul>
 <h2 id="platform-and-device">Platform and Device</h2>
 <p>OpenCL defines a type of physical devices as a platform, for example, Nvidia GPU, Intel CPU. For a computer with a Xeon CPU and a Nvidia GPU, we have two platforms, one for the Intel CPU and one for the Nvidia GPU.</p>
