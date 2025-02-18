@@ -17,6 +17,7 @@ nav:
   - Physics Example - 2D Heat Transfer: 03.md
 - Optimization:
   - Optimizing an OpenCL Program: 04.md
+  - Further Optimizing an OpenCL Program: 05.md
 
 extra_javascript:
 - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
